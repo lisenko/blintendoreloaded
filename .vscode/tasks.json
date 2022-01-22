@@ -11,14 +11,14 @@
                 "PLATFORM=PLATFORM_DESKTOP",
                 "BUILD_MODE=DEBUG",
                 "PROJECT_NAME=${fileBasenameNoExtension}",
-                "OBJS=${fileBasenameNoExtension}.c"
+                "OBJS=*.c"
             ],
             "windows": {
                 "command": "mingw32-make.exe",
                 "args": [
                     "RAYLIB_PATH=C:/raylib/raylib",
                     "PROJECT_NAME=${fileBasenameNoExtension}",
-                    "OBJS=${fileBasenameNoExtension}.c",
+                    "OBJS=*.c",
                     "BUILD_MODE=DEBUG"
                 ],
             },

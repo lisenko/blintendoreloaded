@@ -1,15 +1,30 @@
 #include "raylib.h"
+#include "6502.h"
 
 #include <stdlib.h>         // Required for: malloc() and free()
+#include <stdio.h>
+#include <stdint.h>
 
 int main(void)
 {
     // Initialization
     //--------------------------------------------------------------------------------------
-    const int screenWidth = 800;
-    const int screenHeight = 450;
+    const int screenWidth = 512;
+    const int screenHeight = 480;
 
-    InitWindow(screenWidth, screenHeight, "raylib [textures] example - texture from raw data");
+    struct cpu cpu;
+
+    cpu.pc = 0;
+    cpu.x = 0;
+    cpu.wram[1] = 69;
+
+    uint8_t rom[] = { 0xa5, 0x01 };
+
+    char *status;
+
+    InitWindow(screenWidth, screenHeight, "blintendo");
+
+    SetTargetFPS(60);
 
     // NOTE: Textures MUST be loaded after Window initialization (OpenGL context is required)
 
@@ -47,17 +62,19 @@ int main(void)
     {
         // Update
         //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
-        //----------------------------------------------------------------------------------
+        if(IsKeyPressed(KEY_S)) {
+            status = step(&cpu, rom[cpu.pc], rom);
+        }
 
         // Draw
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
-            ClearBackground(RAYWHITE);
+        ClearBackground(RAYWHITE);
+        
+        DrawText(status, 5, 460, 20, BLACK);
 
-            DrawTexture(checked, screenWidth/2 - checked.width/2, screenHeight/2 - checked.height/2, Fade(WHITE, 0.5f));
-            // DrawTexture(fudesumi, 430, -30, WHITE);
+        // DrawTexture(checked, screenWidth/2 - checked.width/2, screenHeight/2 - checked.height/2, Fade(WHITE, 0.5f));
 
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -65,7 +82,8 @@ int main(void)
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
-    // UnloadTexture(fudesumi);    // Texture unloading
+    free(status);
+
     UnloadTexture(checked);     // Texture unloading
 
     CloseWindow();              // Close window and OpenGL context
