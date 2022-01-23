@@ -14,8 +14,13 @@ int main(void)
 
     struct cpu cpu;
 
+    cpu.cycles = 0;
     cpu.pc = 0;
+    cpu.sp = 0;
+    cpu.a = 0;
     cpu.x = 0;
+    cpu.y = 0;
+    cpu.sr = 0;
     cpu.wram[1] = 69;
 
     uint8_t rom[] = { 0xa9, 0x80, 0x85, 0x01, 0x65, 0x01, 0x65, 0x01, 0xe9, 0x01 };
