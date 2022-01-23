@@ -26,6 +26,39 @@ uint8_t op2() {
     return rom[cpu->pc + 1];
 }
 
+void iimpl() {
+    cpu->pc++;
+    cpu->cycles += 2;
+}
+
+void iimm() {
+    cpu->pc += 2;
+    cpu->cycles += 2;
+}
+
+void iabsx(uint8_t byte) {
+    cpu->pc += 3;
+    cpu->cycles += 4;
+    if (byte < cpu->x) cpu->cycles++;
+}
+
+void iabsy(uint8_t byte) {
+    cpu->pc += 3;
+    cpu->cycles += 4;
+    if (byte < cpu->y) cpu->cycles++;
+}
+
+void iindx() {
+    cpu->pc += 2;
+    cpu->cycles += 6;
+}
+
+void iindy(uint8_t byte) {
+    cpu->pc += 2;
+    cpu->cycles += 5;
+    if (byte < cpu->y) cpu->cycles++;
+}
+
 void flags_zn(uint8_t val) {
     if (val == 0) {
         cpu->sr |= 0b10;
@@ -41,44 +74,37 @@ void flags_zn(uint8_t val) {
 
 void clc() {
     cpu->sr &= ~0b1;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void sec() {
     cpu->sr |= 0b1;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void cli() {
     cpu->sr &= ~0b100;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void sei() {
     cpu->sr |= 0b100;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void clv() {
     cpu->sr &= ~0b1000000;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void cld() {
     cpu->sr &= ~0b1000;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void sed() {
     cpu->sr |= 0b1000;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void lda(uint8_t byte) {
@@ -90,26 +116,25 @@ void lda(uint8_t byte) {
 
 void adc(uint8_t byte) {
     uint16_t result = cpu->a + byte + (cpu->sr & 1 ? 1 : 0);
-    cpu->sr &= ~0b1;
-    // TODO V
-    if (result >= 256) {
-        cpu->sr |= 0b1;
-        result -= 256;
-    }
-    cpu->a = (uint8_t)result;
+    cpu->sr &= ~0b1000001;
+    // V = 0 when U1 + U2 >= 128 and U1 + U2 <= 383 ($17F)
+    // V = 1 when U1 + U2 <  128 or  U1 + U2 >  383 ($17F)
+    if ((result < 0x7f) | (result > 0x17f)) cpu->sr |= 0b1000000;
+    if (result >= 0x100) cpu->sr |= 0b1;
+    cpu->a = result & 0xFF;
     //update pc in opcode
     //update cycles in opcode
     flags_zn(cpu->a);
 };
 
 void sbc(uint8_t byte) {
-    uint16_t result = 0xFF + cpu->a - byte + (cpu->sr & 1 ? 0 : 1);
-    // TODO V
-    if (result > 256) {
-        cpu->sr |= 0b1;
-        result -= 256;
-    }
-    cpu->a = (uint8_t)result;
+    uint16_t result = 0xFEFF + cpu->a - byte + (cpu->sr & 1 ? 1 : 0);
+    cpu->sr |= 0b1000001;
+    // V = 0 when (65280 + U1) - U2 >= 65152 and (65280 + U1) - U2 <= 65407
+    // V = 1 when (65280 + U1) - U2 <  65152 or  (65280 + U1) - U2 >  65407
+    if (((0xFF00 + cpu->a) - byte >= 0xFE80) & ((0xFF00 + cpu->a) - byte <= 0xFF7F)) cpu->sr &= ~0b1000000;
+    if (result < 0xFF00) cpu->sr &= ~0b1; 
+    cpu->a = result & 0xFF;
     //update pc in opcode
     //update cycles in opcode
     flags_zn(cpu->a);
@@ -118,28 +143,24 @@ void sbc(uint8_t byte) {
 //TAX, TAY, TSX, TXA, TYA
 void trans(uint8_t *src, uint8_t *dest) { //rights
     *dest = *src;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
     flags_zn(*dest);
 }
 
 void txs() {
     cpu->sp = cpu->x;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
 }
 
 void inx() {
     cpu->x++;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
     flags_zn(cpu->x);
 }
 
 void iny() {
     cpu->y++;
-    cpu->pc++;
-    cpu->cycles += 2;
+    iimpl();
     flags_zn(cpu->y);
 }
 
@@ -152,28 +173,27 @@ char * step(struct cpu *_cpu, uint8_t opcode, uint8_t _rom[]) {
             //TODO CYKA
             return "BRK";
         case 0x18: // CLC
-            clc(cpu);
+            clc();
             return "CLC";
         case 0x38: // SEC
-            sec(cpu);
+            sec();
             return "SEC";
         case 0x58: // CLI
-            cli(cpu);
+            cli();
             return "CLI";
         case 0x65: // ADC zp
             adc(memr(cpu, op1()));
             snprintf(msg, 100, "ADC $%X", op1());
             cpu->pc += 2;
-            cpu->cycles += 2;
+            cpu->cycles += 3;
             return msg;
         case 0x69: // ADC imm
             adc(op1());
             snprintf(msg, 100, "ADC $#%X", op1());
-            cpu->pc += 2;
-            cpu->cycles += 2;
+            iimm();
             return msg;
         case 0x78: // SEI
-            sei(cpu);
+            sei();
             return "SEI";
         case 0x85: // STA zp
             memw(cpu, op1(), cpu->a);
@@ -188,22 +208,27 @@ char * step(struct cpu *_cpu, uint8_t opcode, uint8_t _rom[]) {
             trans(&cpu->y, &cpu->a);
             return "TYA";
         case 0x9A: // TXS
-            txs(cpu);
+            txs();
             return "TXS";
-        case 0xA8: // TAY
-            trans(&cpu->a, &cpu->y);
-            return "TAY";
+        case 0xA1: // LDA ind+x
+            uint16_t addr = (memr(cpu, (op1() + cpu->x + 1) % 256) << 8) + memr(cpu, (op1() + cpu->x) % 256);
+            lda(memr(cpu, addr));
+            snprintf(msg, 100, "LDA ($%X,X)", op1());
+            iindx();
+            return msg;
         case 0xA5: // LDA zp
             lda(memr(cpu, op1()));
             snprintf(msg, 100, "LDA $%X", op1());
             cpu->pc += 2;
             cpu->cycles += 3;
             return msg;
+        case 0xA8: // TAY
+            trans(&cpu->a, &cpu->y);
+            return "TAY";
         case 0xA9: // LDA imm
             lda(op1());
             snprintf(msg, 100, "LDA $#%X", op1());
-            cpu->pc += 2;
-            cpu->cycles += 2;
+            iimm();
             return msg;
         case 0xAA: // TAX
             trans(&cpu->a, &cpu->x);
@@ -215,35 +240,55 @@ char * step(struct cpu *_cpu, uint8_t opcode, uint8_t _rom[]) {
             cpu->pc += 3;
             cpu->cycles += 4;
             return msg;
+        case 0xB1: // LDA ind+y
+            uint16_t addr = (memr(cpu, ((op1() + 1) % 256) << 8) + cpu->y) + memr(cpu, op1());
+            lda(memr(cpu, addr));
+            snprintf(msg, 100, "LDA ($%X),Y", op1());
+            iindy(op1());
+            return msg;
         case 0xB5: // LDA zp+x
-            lda(memr(cpu, rom[(op1() + cpu->x) % 256]));
-            snprintf(msg, 100, "LDA $%X", op1());
+            lda(memr(cpu, (op1() + cpu->x) % 256));
+            snprintf(msg, 100, "LDA $%X,X", op1());
             cpu->pc += 2;
             cpu->cycles += 4;
             return msg;
         case 0xB8: // CLV
-            clv(cpu);
+            clv();
             return "CLV";
+        case 0xB9: // LDA abs+y
+            uint16_t addr = (op2() << 8) + op1() + cpu->y;
+            lda(memr(cpu, addr));
+            snprintf(msg, 100, "LDA $%X%X,Y", op2(), op1());
+            iabsy(op1());
+            return msg;
         case 0xBA: // TSX
             trans(&cpu->sp, &cpu->x);
             return "TSX";
+        case 0xBD: // LDA abs+x
+            uint16_t addr = (op2() << 8) + op1() + cpu->x;
+            lda(memr(cpu, addr));
+            snprintf(msg, 100, "LDA $%X%X,X", op2(), op1());
+            iabsx(op1());
+            return msg;
         case 0xC8: // INY
-            iny(cpu);
+            iny();
             return "INY";
         case 0xD8: // CLD
-            cld(cpu);
+            cld();
             return "CLD";
         case 0xE8: // INX
-            inx(cpu);
+            inx();
             return "INX";
         case 0xE9: // SBC imm
-        
+            sbc(op1());
+            snprintf(msg, 100, "SBC $#%X", op1());
+            iimm();
+            return msg;
         case 0xEA: // NOP
-            cpu->pc++;
-            cpu->cycles += 2;
+            iimpl();
             return "NOP";
         case 0xF8: // SED
-            sed(cpu);
+            sed();
             return "SED";
         default:
             snprintf(msg, 100, "Unknown opcode %X", opcode);
